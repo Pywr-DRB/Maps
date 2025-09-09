@@ -6,6 +6,8 @@ Contains all plotting functions used for Pywr-DRB model assessments, including:
 import geopandas as gpd
 from shapely import ops
 from shapely.geometry import Point, LineString, MultiLineString
+from shapely.geometry import box
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -31,6 +33,8 @@ def make_DRB_map(fig_dir=fig_dir,
                  use_basemap = True,
                  plot_temp_lstm_inputs=True,
                  plot_salinity_lstm_inputs=True,
+                 plot_salinity_normal_range=True,
+                 plot_salinity_target=True,
                  plot_tributaries = True,
                  plot_flow_requirements = True,
                  plot_lordville = True,
@@ -42,6 +46,7 @@ def make_DRB_map(fig_dir=fig_dir,
     ### set crs consistent with contextily basemap
     crs = 'EPSG:3857'
     crs_nodedata = 4386
+    crs_longlat = 'EPSG:4326'
 
 
     # # Reservoir data
@@ -76,7 +81,7 @@ def make_DRB_map(fig_dir=fig_dir,
     
 
     ### plot drb boundary
-    drb_boundary.plot(ax=ax, color='none', edgecolor='k', lw=1, zorder=0.9)
+    drb_boundary.plot(ax=ax, color='none', edgecolor='k', lw=0.5, zorder=0.9)
 
     ### plot river network
     mainstem.plot(ax=ax, color='navy', lw=2, zorder=1.1)
@@ -107,7 +112,7 @@ def make_DRB_map(fig_dir=fig_dir,
             tribs.append(trib)
 
         for trib in tribs:
-            trib.plot(ax=ax, color='cornflowerblue', lw=2, zorder=1)
+            trib.plot(ax=ax, color='cornflowerblue', lw=1, zorder=1)
 
     # reservoirs
     list_nyc_reservoirs = ('reservoir_cannonsville', 'reservoir_pepacton', 'reservoir_neversink')
@@ -180,7 +185,8 @@ def make_DRB_map(fig_dir=fig_dir,
                                                             crs=crs_nodedata)).to_crs(crs)
 
         # second point has coordinates:
-        coords = (-75.280370, 41.941378)
+        coords = (-75.10, 42.0)
+        
         Qin_b = gpd.GeoDataFrame({'name': ['Qin_b'], 'long': [coords[0]], 'lat': [coords[1]]},
                                   geometry=gpd.points_from_xy([coords[0]], [coords[1]],
                                                               crs=crs_nodedata)).to_crs(crs)
@@ -193,18 +199,55 @@ def make_DRB_map(fig_dir=fig_dir,
         # 1. trenton gage
         # 2. schuylkill outlet
         Qin_c = major_nodes.loc[major_nodes['name'] == 'link_delTrenton']
+        
         Qin_c = gpd.GeoDataFrame(Qin_c,
                                 geometry=gpd.points_from_xy(Qin_c.long, Qin_c.lat,
                                                             crs=crs_nodedata)).to_crs(crs)
 
         Qin_d = major_nodes.loc[major_nodes['name'] == 'link_outletSchuylkill']
+        
+        # for the schuylkill outlet, move the coordinate to the west for better visibility
+        Qin_d['lat'] = float(Qin_d['lat'])
+        Qin_d['long'] = float(Qin_d['long']) - 0.1
+        
         Qin_d = gpd.GeoDataFrame(Qin_d,
                                 geometry=gpd.points_from_xy(Qin_d.long, Qin_d.lat,
                                                             crs=crs_nodedata)).to_crs(crs)
-        Qin_c.plot(ax=ax, color='green', edgecolor='k', markersize=100, zorder=2.1, marker='D')
+        Qin_c.plot(ax=ax, color='mediumseagreen', edgecolor='k', markersize=100, zorder=2.1, marker='D')
         Qin_d.plot(ax=ax, color='darkgreen', edgecolor='k', markersize=100, zorder=2.1, marker='D')
 
-
+    if plot_salinity_normal_range:
+        # northern and southern bounds of normal salinity range
+        range_lat_bounds = [39.628079, 39.878107]
+        
+        # convert these latitudes to the map crs
+        point1 = gpd.GeoDataFrame({'name': ['point1'], 'long': [-75.477484], 'lat': [range_lat_bounds[0]]},
+                                  geometry=gpd.points_from_xy([-75.477484], [range_lat_bounds[0]],
+                                                              crs=crs_nodedata)).to_crs(crs)
+        point2 = gpd.GeoDataFrame({'name': ['point2'], 'long': [-75.477484], 'lat': [range_lat_bounds[1]]},
+                                  geometry=gpd.points_from_xy([-75.477484], [range_lat_bounds[1]],
+                                                              crs=crs_nodedata)).to_crs(crs)
+        
+        
+        # get the drb mainstem line geometry which is within these lat bounds
+        # must trim the line to be within the lat bounds
+        bounds = mainstem.total_bounds  # [minx, miny, maxx, maxy]
+        clip_box = box(bounds[0], point1.geometry.y.iloc[0], bounds[2], point2.geometry.y.iloc[0])
+        
+        # Clip the geometry to the latitude range
+        mainstem_range_segment = gpd.clip(mainstem, clip_box)
+    
+        mainstem_range_segment.plot(ax=ax, color='cyan', lw=6, alpha=0.5, zorder=1.2) 
+        
+    if plot_salinity_target:
+        # make a single point for the target location 
+        coords = (-75.477484, 39.752665)
+        target_point = gpd.GeoDataFrame({'name': ['target'], 'long': [coords[0]], 'lat': [coords[1]]},
+                                  geometry=gpd.points_from_xy([coords[0]], [coords[1]],
+                                                              crs=crs_nodedata)).to_crs(crs)
+        target_point.plot(ax=ax, color='gold', edgecolor='k', 
+                          markersize=150, zorder=2.3, marker='*')
+        
     ### add state boundaries
     if use_basemap:
         states.plot(ax=ax, color='none', edgecolor='0.5', lw=0.7, zorder=0)
@@ -270,17 +313,23 @@ def make_DRB_map(fig_dir=fig_dir,
     ### mainstem
     axin.plot([0.05, 0.15], [0.93, 0.93], color='navy', lw=3)
     axin.annotate('Delaware River', xy=(0.18, 0.93), ha='left', va='center', color='k', fontsize=fontsize)
-    ### tributaries
-    axin.plot([0.05, 0.15], [0.83, 0.83], color='cornflowerblue', lw=2)
-    axin.annotate('Tributary', xy=(0.18, 0.83), ha='left', va='center', color='k', fontsize=fontsize)
-    ### DRB boundary
+
+    # tributaries
+    if plot_tributaries:
+        axin.plot([0.05, 0.15], [0.83, 0.83], color='cornflowerblue', lw=2)
+        axin.annotate('Tributary', xy=(0.18, 0.83), ha='left', va='center', color='k', fontsize=fontsize)
+
+    # DRB boundary
     axin.plot([0.05, 0.15], [0.73, 0.73], color='k', lw=1)
     axin.annotate('Basin Boundary', xy=(0.18, 0.73), ha='left', va='center', color='k', fontsize=fontsize)
 
     ### Minimum flow targets
-    axin.scatter([0.1], [0.53], color='mediumseagreen', edgecolor='k', s=200, marker='*')
-    axin.annotate('Flow Target', xy=(0.18, 0.53), ha='left', va='center', color='mediumseagreen', fontweight='bold',
-                  fontsize=fontsize)
+
+    if plot_flow_requirements:
+        axin.scatter([0.1], [0.53], color='mediumseagreen', edgecolor='k', s=200, marker='*')
+        axin.annotate('Flow Target', xy=(0.18, 0.53), ha='left', va='center', color='mediumseagreen', fontweight='bold',
+                    fontsize=fontsize)
+
     ### NYC Reservoirs
     axin.scatter([0.1], [0.43], color='firebrick', edgecolor='k', s=100)
     axin.annotate('NYC Reservoir', xy=(0.18, 0.43), ha='left', va='center', color='firebrick', fontweight='bold',
@@ -319,4 +368,6 @@ def make_DRB_map(fig_dir=fig_dir,
 
 if __name__ == "__main__":
     make_DRB_map(plot_flow_requirements=False, 
-                 plot_salinity_lstm_inputs=True)
+                 plot_salinity_lstm_inputs=True,
+                 plot_temp_lstm_inputs=True,
+                 scale_reservoirs_by_capacity=False,)
