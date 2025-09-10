@@ -374,12 +374,11 @@ def make_DRB_map(fig_dir=fig_dir,
 
     if plot_salinity_normal_range:
         axin.plot([0.05, 0.15], [0.13, 0.13], color='gold', lw=6, 
-                  zorder = 2, 
-                  alpha=0.75)
+                  zorder = 2, alpha=0.75)
         # No annotation label for this
     
     if plot_salinity_target:
-        axin.scatter([0.1], [0.13], color='gold', edgecolor='k', s=150, marker='P')
+        axin.scatter([0.1], [0.13], color='gold', edgecolor='k', s=150, zorder = 10, marker='P')
         axin.annotate('Salinity LSTM Target', xy=(0.18, 0.13), 
                       zorder=10,
                       ha='left', va='center', color='k', fontsize=fontsize)
@@ -388,8 +387,7 @@ def make_DRB_map(fig_dir=fig_dir,
     if plot_lordville:
         axin.scatter([0.1], [0.23], color='orange', edgecolor='k', s=150, marker='*')
         axin.annotate('Temp LSTM Target', xy=(0.18, 0.23), 
-                      ha='left', va='center', color='k', fontweight='bold',
-                      fontsize=fontsize)
+                      ha='left', va='center', color='k', fontsize=fontsize)
     
     if plot_temp_lstm_inputs:
         axin.scatter([0.1], [0.63], color='blue', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='left'))
