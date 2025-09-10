@@ -7,7 +7,7 @@ import geopandas as gpd
 from shapely import ops
 from shapely.geometry import Point, LineString, MultiLineString
 from shapely.geometry import box
-
+from matplotlib.markers import MarkerStyle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -35,12 +35,13 @@ def make_DRB_map(fig_dir=fig_dir,
                  plot_salinity_lstm_inputs=True,
                  plot_salinity_normal_range=True,
                  plot_salinity_target=True,
+                 plot_1960s_salt_front=True,
                  plot_tributaries = True,
                  plot_flow_requirements = True,
                  plot_lordville = True,
                  annotate_state_boundaries=True,
                  annotate_nyc_reservoirs=True,
-                 annotage_drbc_lb_reservoirs=True,
+                 annotate_drbc_lb_reservoirs=True,
                  units='MG'):
 
     ### set crs consistent with contextily basemap
@@ -118,8 +119,7 @@ def make_DRB_map(fig_dir=fig_dir,
     list_nyc_reservoirs = ('reservoir_cannonsville', 'reservoir_pepacton', 'reservoir_neversink')
     list_drbc_lb_reservoirs = [
         'reservoir_beltzvilleCombined', 
-        'reservoir_blueMarsh', 
-        'reservoir_fewalter'
+        'reservoir_blueMarsh',
         ]
     
     
@@ -170,7 +170,7 @@ def make_DRB_map(fig_dir=fig_dir,
         lordville = gpd.GeoDataFrame(lordville,
                                     geometry=gpd.points_from_xy(lordville.long, lordville.lat,
                                                                 crs=crs_nodedata)).to_crs(crs)
-        lordville.plot(ax=ax, color='gold', 
+        lordville.plot(ax=ax, color='orange', 
                        edgecolor='k', markersize=250, zorder=2.1, marker='*')
 
 
@@ -180,6 +180,12 @@ def make_DRB_map(fig_dir=fig_dir,
         # 1. cannonsville release gauge
         # 2. east branch delaware outlet
         Qin_a = major_nodes.loc[major_nodes['name'] == 'link_01425000']
+        
+        # Move this slightly west for better visibility
+        Qin_a['long'] = float(Qin_a['long']) - 0.02
+        Qin_a['lat'] = float(Qin_a['lat']) - 0.02
+
+
         Qin_a = gpd.GeoDataFrame(Qin_a,
                                 geometry=gpd.points_from_xy(Qin_a.long, Qin_a.lat,
                                                             crs=crs_nodedata)).to_crs(crs)
@@ -207,8 +213,8 @@ def make_DRB_map(fig_dir=fig_dir,
         Qin_d = major_nodes.loc[major_nodes['name'] == 'link_outletSchuylkill']
         
         # for the schuylkill outlet, move the coordinate to the west for better visibility
-        Qin_d['lat'] = float(Qin_d['lat'])
-        Qin_d['long'] = float(Qin_d['long']) - 0.1
+        Qin_d['lat'] = float(Qin_d['lat']) + 0.1
+        Qin_d['long'] = float(Qin_d['long'])
         
         Qin_d = gpd.GeoDataFrame(Qin_d,
                                 geometry=gpd.points_from_xy(Qin_d.long, Qin_d.lat,
@@ -218,7 +224,7 @@ def make_DRB_map(fig_dir=fig_dir,
 
     if plot_salinity_normal_range:
         # northern and southern bounds of normal salinity range
-        range_lat_bounds = [39.628079, 39.878107]
+        range_lat_bounds = [39.66, 39.79]
         
         # convert these latitudes to the map crs
         point1 = gpd.GeoDataFrame({'name': ['point1'], 'long': [-75.477484], 'lat': [range_lat_bounds[0]]},
@@ -236,8 +242,7 @@ def make_DRB_map(fig_dir=fig_dir,
         
         # Clip the geometry to the latitude range
         mainstem_range_segment = gpd.clip(mainstem, clip_box)
-    
-        mainstem_range_segment.plot(ax=ax, color='cyan', lw=6, alpha=0.5, zorder=1.2) 
+        mainstem_range_segment.plot(ax=ax, color='gold', lw=6, alpha=0.75, zorder=1.2) 
         
     if plot_salinity_target:
         # make a single point for the target location 
@@ -246,8 +251,17 @@ def make_DRB_map(fig_dir=fig_dir,
                                   geometry=gpd.points_from_xy([coords[0]], [coords[1]],
                                                               crs=crs_nodedata)).to_crs(crs)
         target_point.plot(ax=ax, color='gold', edgecolor='k', 
-                          markersize=150, zorder=2.3, marker='*')
-        
+                          markersize=150, zorder=2.3, marker='P')
+    
+    if plot_1960s_salt_front:
+        coords = (-75.110971, 39.969294)
+        salt_front_point = gpd.GeoDataFrame({'name': ['salt_front'], 'long': [coords[0]], 'lat': [coords[1]]},
+                                  geometry=gpd.points_from_xy([coords[0]], [coords[1]],
+                                                              crs=crs_nodedata)).to_crs(crs)
+        salt_front_point.plot(ax=ax, color='purple', edgecolor='k',
+                              markersize=150, zorder=2.3, marker='*')
+
+
     ### add state boundaries
     if use_basemap:
         states.plot(ax=ax, color='none', edgecolor='0.5', lw=0.7, zorder=0)
@@ -287,11 +301,23 @@ def make_DRB_map(fig_dir=fig_dir,
         plt.annotate('Neversink', xy=(-8.268e6, 5.143e6), 
                      ha='center', va='center', 
                      fontsize=fontsize, color=fontcolor, fontweight='bold')
-        
+
+    if annotate_drbc_lb_reservoirs:
+        fontcolor = 'darkorchid'
+        # Add labels to blueMarsh, Beltzville, and Fewalter
+        plt.annotate('Blue Marsh', xy=(-8.420e6, 4.920e6), 
+                     ha='center', va='center', 
+                     fontsize=fontsize, color=fontcolor, fontweight='bold')
+        plt.annotate('Beltzville', xy=(-8.404e6, 5.000e6), 
+                     ha='center', va='center', 
+                     fontsize=fontsize, color=fontcolor, fontweight='bold')
+
+
+
     if plot_lordville:
         plt.annotate('Lordville', xy=(-8.410e6, 5.143e6), 
                      ha='center', va='center', 
-                     fontsize=fontsize, color='gold', fontweight='bold')
+                     fontsize=fontsize, color='orange', fontweight='bold')
 
     if plot_flow_requirements:
         fontcolor = 'mediumseagreen'
@@ -302,7 +328,7 @@ def make_DRB_map(fig_dir=fig_dir,
                      ha='center', va='center', fontsize=fontsize, color=fontcolor,
                     fontweight='bold')
 
-
+    
 
 
 
@@ -335,10 +361,51 @@ def make_DRB_map(fig_dir=fig_dir,
     axin.annotate('NYC Reservoir', xy=(0.18, 0.43), ha='left', va='center', color='firebrick', fontweight='bold',
                   fontsize=fontsize)
     ### Non-NYC Reservoirs
-    axin.scatter([0.1], [0.33], color='sandybrown', edgecolor='k', s=100)
-    axin.annotate('Non-NYC Reservoir', xy=(0.18, 0.33), ha='left', va='center', color='k', fontsize=fontsize)
+    # axin.scatter([0.1], [0.33], color='sandybrown', edgecolor='k', s=100)
+    # axin.annotate('Non-NYC Reservoir', xy=(0.18, 0.33), ha='left', va='center', color='k', fontsize=fontsize)
+
+    # Lower basin reservoirs
+    if annotate_drbc_lb_reservoirs:
+        axin.scatter([0.1], [0.33], color='darkorchid', edgecolor='k', s=100)
+        axin.annotate('USACE Reservoir', xy=(0.18, 0.33), 
+                      ha='left', va='center', color='darkorchid', fontweight='bold',
+                      fontsize=fontsize)
+
+
+    if plot_salinity_normal_range:
+        axin.plot([0.05, 0.15], [0.13, 0.13], color='gold', lw=6, 
+                  zorder = 2, 
+                  alpha=0.75)
+        # No annotation label for this
+    
+    if plot_salinity_target:
+        axin.scatter([0.1], [0.13], color='gold', edgecolor='k', s=150, marker='P')
+        axin.annotate('Salinity LSTM Target', xy=(0.18, 0.13), 
+                      zorder=10,
+                      ha='left', va='center', color='k', fontsize=fontsize)
+
+    
+    if plot_lordville:
+        axin.scatter([0.1], [0.23], color='orange', edgecolor='k', s=150, marker='*')
+        axin.annotate('Temp LSTM Target', xy=(0.18, 0.23), 
+                      ha='left', va='center', color='k', fontweight='bold',
+                      fontsize=fontsize)
+    
+    if plot_temp_lstm_inputs:
+        axin.scatter([0.1], [0.63], color='blue', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='left'))
+        axin.scatter([0.1], [0.63], color='brown', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='right'))
+        axin.annotate('Temp LSTM Input', xy=(0.18, 0.63), 
+                      ha='left', va='center', color='k', fontsize=fontsize)
+    
+    if plot_salinity_lstm_inputs:
+        axin.scatter([0.1], [0.53], color='mediumseagreen', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='left'))
+        axin.scatter([0.1], [0.53], color='darkgreen', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='right'))
+        axin.annotate('Salt LSTM Input', xy=(0.18, 0.53), 
+                      ha='left', va='center', color='k', fontsize=fontsize)
+
+    
     ### marker size for reservoirs
-    # axin.annotate('Reservoir Capacity', xy=(0.05, 0.3), ha='left', va='center', color='k', fontsize=fontsize)
+    # axin.annotate('Reservoir Capacity', xy=(0.05, 0.3), ha='left', va='center', color='k', fontsize=fontsize)    
     
     if scale_reservoirs_by_capacity:
         axin.scatter([0.15], [0.18], color='0.5', edgecolor='k', s=50 + 10  / 2)
@@ -351,23 +418,26 @@ def make_DRB_map(fig_dir=fig_dir,
     axin.set_xticks([])
     axin.set_yticks([])
     axin.patch.set_alpha(0.9)
-
-    # ### basemap - this is slow and breaks sometimes, if so just try later
-    if use_basemap:
-        cx.add_basemap(ax=ax, alpha=0.5, attribution_size=6, 
-                       source=cx.providers.CartoDB.Positron)
-        figname = f'{fig_dir}/static_map_withbasemap_positron.png'
-    else:
-        figname = f'{fig_dir}static_map.png'
-
     ax.set_xticks([])
     ax.set_yticks([])
+    
+    # ### basemap - this is slow and breaks sometimes, if so just try later
+    if use_basemap:
+        cx.add_basemap(ax=ax, alpha=0.75, attribution_size=6, 
+                       source=cx.providers.CartoDB.Positron)
+        figname = f'{fig_dir}/static_map_withbasemap_positron.png'
+        plt.savefig(figname, bbox_inches='tight', dpi=dpi)
 
-    plt.savefig(figname, bbox_inches='tight', dpi=dpi)
+        figname = f'{fig_dir}/static_map_withbasemap.svg'
+        plt.savefig(figname, bbox_inches='tight', dpi=dpi)
+
+    else:
+        figname = f'{fig_dir}static_map.png'
 
 
 if __name__ == "__main__":
     make_DRB_map(plot_flow_requirements=False, 
                  plot_salinity_lstm_inputs=True,
                  plot_temp_lstm_inputs=True,
-                 scale_reservoirs_by_capacity=False,)
+                 scale_reservoirs_by_capacity=False,
+                 plot_1960s_salt_front=False)
