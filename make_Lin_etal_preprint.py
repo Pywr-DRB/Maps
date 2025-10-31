@@ -39,6 +39,7 @@ def make_DRB_map(fig_dir=fig_dir,
                  plot_tributaries = True,
                  plot_flow_requirements = True,
                  plot_lordville = True,
+                 plot_philadelphia_intake = True,
                  annotate_state_boundaries=True,
                  annotate_nyc_reservoirs=True,
                  annotate_drbc_lb_reservoirs=True,
@@ -158,6 +159,9 @@ def make_DRB_map(fig_dir=fig_dir,
     if plot_flow_requirements:
 
         flow_reqs = major_nodes.loc[major_nodes['type'] == 'regulatory']
+        
+        # for now, plot only Montague (not Trenton)
+        flow_reqs = flow_reqs.loc[(flow_reqs['name'] == 'link_delMontague')]        
         flow_reqs = gpd.GeoDataFrame(flow_reqs,
                                     geometry=gpd.points_from_xy(flow_reqs.long, flow_reqs.lat,
                                                                 crs=crs_nodedata)).to_crs(crs)
@@ -258,8 +262,16 @@ def make_DRB_map(fig_dir=fig_dir,
         salt_front_point = gpd.GeoDataFrame({'name': ['salt_front'], 'long': [coords[0]], 'lat': [coords[1]]},
                                   geometry=gpd.points_from_xy([coords[0]], [coords[1]],
                                                               crs=crs_nodedata)).to_crs(crs)
-        salt_front_point.plot(ax=ax, color='purple', edgecolor='k',
-                              markersize=150, zorder=2.3, marker='*')
+        salt_front_point.plot(ax=ax, color='red', edgecolor='k',
+                              markersize=100, zorder=2.3, marker='^')
+        
+    if plot_philadelphia_intake:
+        coords = (-74.9654, 40.0381)
+        philly_intake_point = gpd.GeoDataFrame({'name': ['philly_intake'], 'long': [coords[0]], 'lat': [coords[1]]},
+                                  geometry=gpd.points_from_xy([coords[0]], [coords[1]],
+                                                              crs=crs_nodedata)).to_crs(crs)
+        philly_intake_point.plot(ax=ax, color='cyan', edgecolor='k',
+                              markersize=60, zorder=2.3, marker='s')
 
 
     ### add state boundaries
@@ -332,76 +344,128 @@ def make_DRB_map(fig_dir=fig_dir,
 
 
 
-    ### legend
-    axin = ax.inset_axes([0.58, 0.006, 0.41, 0.25])
+    ### Custom legend
+    # Determine how many items will be included
+    n_legend_items = 4 # mainstem, boundary, nyc res, reservoir cap scale
+    
+    n_legend_items += int(plot_tributaries)
+    n_legend_items += int(plot_temp_lstm_inputs)
+    n_legend_items += int(plot_salinity_lstm_inputs)
+    n_legend_items += int(plot_salinity_target)
+    n_legend_items += int(plot_1960s_salt_front)
+    n_legend_items += int(plot_flow_requirements)
+    n_legend_items += int(plot_lordville)
+    n_legend_items += int(plot_philadelphia_intake)
+    
+    # current y position for legend items
+    yi = 0.95
+    item_spacing = 1/n_legend_items
+    fontsize = 9
+
+    # make inset axes for legend
+    axin_height = 0.03 * n_legend_items + 0.06
+    axin_width = 0.35
+    axin_x0 = 0.65
+    axin_y0 = 0.0
+    axin = ax.inset_axes([axin_x0, axin_y0, 
+                          axin_width, axin_height])  # [x0, y0, width, height]
     axin.set_xlim([0, 1])
     axin.set_ylim([0, 1])
+    
+    
     ### mainstem
-    axin.plot([0.05, 0.15], [0.93, 0.93], color='navy', lw=3)
-    axin.annotate('Delaware River', xy=(0.18, 0.93), ha='left', va='center', color='k', fontsize=fontsize)
+    axin.plot([0.05, 0.15], [yi, yi], color='navy', lw=3)
+    axin.annotate('Delaware River', xy=(0.18, yi), ha='left', va='center', color='k', fontsize=fontsize)
 
     # tributaries
     if plot_tributaries:
-        axin.plot([0.05, 0.15], [0.83, 0.83], color='cornflowerblue', lw=2)
-        axin.annotate('Tributary', xy=(0.18, 0.83), ha='left', va='center', color='k', fontsize=fontsize)
+        yi -= item_spacing
+        axin.plot([0.05, 0.15], [yi, yi], color='cornflowerblue', lw=2)
+        axin.annotate('Tributary', xy=(0.18, yi), ha='left', va='center', color='k', fontsize=fontsize)
 
     # DRB boundary
-    axin.plot([0.05, 0.15], [0.73, 0.73], color='k', lw=1)
-    axin.annotate('Basin Boundary', xy=(0.18, 0.73), ha='left', va='center', color='k', fontsize=fontsize)
-
-    ### Minimum flow targets
-
-    if plot_flow_requirements:
-        axin.scatter([0.1], [0.53], color='mediumseagreen', edgecolor='k', s=200, marker='*')
-        axin.annotate('Flow Target', xy=(0.18, 0.53), ha='left', va='center', color='mediumseagreen', fontweight='bold',
-                    fontsize=fontsize)
+    yi -= item_spacing
+    axin.plot([0.05, 0.15], [yi, yi], color='k', lw=1)
+    axin.annotate('Basin Boundary', xy=(0.18, yi), ha='left', va='center', color='k', fontsize=fontsize)
 
     ### NYC Reservoirs
-    axin.scatter([0.1], [0.43], color='firebrick', edgecolor='k', s=100)
-    axin.annotate('NYC Reservoir', xy=(0.18, 0.43), ha='left', va='center', color='firebrick', fontweight='bold',
+    yi -= item_spacing
+    axin.scatter([0.1], [yi], color='firebrick', edgecolor='k', s=100)
+    axin.annotate('NYC Reservoir', xy=(0.18, yi), 
+                  ha='left', va='center', color='k', 
                   fontsize=fontsize)
-    ### Non-NYC Reservoirs
-    # axin.scatter([0.1], [0.33], color='sandybrown', edgecolor='k', s=100)
-    # axin.annotate('Non-NYC Reservoir', xy=(0.18, 0.33), ha='left', va='center', color='k', fontsize=fontsize)
 
     # Lower basin reservoirs
     if annotate_drbc_lb_reservoirs:
-        axin.scatter([0.1], [0.33], color='darkorchid', edgecolor='k', s=100)
-        axin.annotate('USACE Reservoir', xy=(0.18, 0.33), 
-                      ha='left', va='center', color='darkorchid', fontweight='bold',
+        yi -= item_spacing
+        axin.scatter([0.1], [yi], color='darkorchid', edgecolor='k', s=100)
+        axin.annotate('USACE Reservoir', xy=(0.18, yi), 
+                      ha='left', va='center', color='k',
+                      fontsize=fontsize)
+
+    ### Minimum flow targets
+    if plot_flow_requirements:
+        yi -= item_spacing
+        axin.scatter([0.1], [yi], color='mediumseagreen', edgecolor='k', s=200, marker='*')
+        axin.annotate('Flow Target', xy=(0.18, yi), 
+                      ha='left', va='center', color='k',
+                      fontsize=fontsize)
+
+    if plot_philadelphia_intake:
+        yi -= item_spacing
+        axin.scatter([0.1], [yi], color='cyan', 
+                     edgecolor='k', s=60, marker='s')
+        axin.annotate('Phila. Intake', xy=(0.18, yi), ha='left', 
+                      va='center', color='k',
+                        fontsize=fontsize)
+    
+    if plot_1960s_salt_front:
+        yi -= item_spacing
+        axin.scatter([0.1], [yi], color='red', edgecolor='k', s=100, marker='^')
+        axin.annotate('1960s Salt Front', xy=(0.18, yi), 
+                      ha='left', va='center', color='k', 
                       fontsize=fontsize)
 
 
-    if plot_salinity_normal_range:
-        axin.plot([0.05, 0.15], [0.13, 0.13], color='gold', lw=6, 
-                  zorder = 2, alpha=0.75)
-        # No annotation label for this
-    
-    if plot_salinity_target:
-        axin.scatter([0.1], [0.13], color='gold', edgecolor='k', s=150, zorder = 10, marker='P')
-        axin.annotate('Salinity LSTM Target', xy=(0.18, 0.13), 
-                      zorder=10,
+    if plot_temp_lstm_inputs:
+        yi -= item_spacing
+        axin.scatter([0.1], [yi], color='blue', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='left'))
+        axin.scatter([0.1], [yi], color='brown', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='right'))
+        axin.annotate('Temp LSTM Input', xy=(0.18, yi), 
                       ha='left', va='center', color='k', fontsize=fontsize)
 
     
     if plot_lordville:
-        axin.scatter([0.1], [0.23], color='orange', edgecolor='k', s=150, marker='*')
-        axin.annotate('Temp LSTM Target', xy=(0.18, 0.23), 
-                      ha='left', va='center', color='k', fontsize=fontsize)
-    
-    if plot_temp_lstm_inputs:
-        axin.scatter([0.1], [0.63], color='blue', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='left'))
-        axin.scatter([0.1], [0.63], color='brown', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='right'))
-        axin.annotate('Temp LSTM Input', xy=(0.18, 0.63), 
-                      ha='left', va='center', color='k', fontsize=fontsize)
-    
-    if plot_salinity_lstm_inputs:
-        axin.scatter([0.1], [0.53], color='mediumseagreen', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='left'))
-        axin.scatter([0.1], [0.53], color='darkgreen', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='right'))
-        axin.annotate('Salt LSTM Input', xy=(0.18, 0.53), 
+        yi -= item_spacing
+        axin.scatter([0.1], [yi], color='orange', edgecolor='k', s=150, marker='*')
+        axin.annotate('Temp LSTM Target', xy=(0.18, yi), 
                       ha='left', va='center', color='k', fontsize=fontsize)
 
+
+    if plot_salinity_lstm_inputs:
+        yi -= item_spacing
+        axin.scatter([0.1], [yi], color='mediumseagreen', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='left'))
+        axin.scatter([0.1], [yi], color='darkgreen', edgecolor='k', s=100, marker=MarkerStyle('D', fillstyle='right'))
+        axin.annotate('Salt LSTM Input', xy=(0.18, yi), 
+                      ha='left', va='center', color='k', fontsize=fontsize)
     
+    if plot_salinity_target:
+        yi -= item_spacing
+        axin.scatter([0.1], [yi], color='gold', edgecolor='k', s=150, zorder = 10, marker='P')
+        axin.annotate('Salinity LSTM Target', xy=(0.18, yi), 
+                      zorder=10,
+                      ha='left', va='center', color='k', fontsize=fontsize)
+
+        if plot_salinity_normal_range:
+            axin.plot([0.05, 0.15], [yi, yi], color='gold', lw=6, 
+                    zorder = 2, alpha=0.75)
+    
+
+    ### Non-NYC Reservoirs
+    # axin.scatter([0.1], [0.33], color='sandybrown', edgecolor='k', s=100)
+    # axin.annotate('Non-NYC Reservoir', xy=(0.18, 0.33), ha='left', va='center', color='k', fontsize=fontsize)
+
+
     ### marker size for reservoirs
     # axin.annotate('Reservoir Capacity', xy=(0.05, 0.3), ha='left', va='center', color='k', fontsize=fontsize)    
     
@@ -434,8 +498,8 @@ def make_DRB_map(fig_dir=fig_dir,
 
 
 if __name__ == "__main__":
-    make_DRB_map(plot_flow_requirements=False, 
+    make_DRB_map(plot_flow_requirements=True, 
                  plot_salinity_lstm_inputs=True,
                  plot_temp_lstm_inputs=True,
                  scale_reservoirs_by_capacity=False,
-                 plot_1960s_salt_front=False)
+                 plot_1960s_salt_front=True)
