@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.patheffects as path_effects
 import contextily as cx
 
 mcm_to_mg = 264.17
@@ -35,6 +36,7 @@ def make_DRB_map(fig_dir=fig_dir,
                  plot_flow_requirements = True,
                  annotate_state_boundaries=True,
                  annotate_nyc_reservoirs=True,
+                 drb_highlight=None,
                  units='MG'):
 
     ### set crs consistent with contextily basemap
@@ -51,6 +53,7 @@ def make_DRB_map(fig_dir=fig_dir,
     states = gpd.read_file(f'{spatial_data_dir}/states/tl_2010_us_state10.shp').to_crs(crs)
     nhd = gpd.read_file(f'{spatial_data_dir}/NHD_0204/Shape/NHDFlowline.shp').to_crs(crs)
     drc = gpd.read_file(f'{spatial_data_dir}/NHD_NJ/DRCanal.shp').to_crs(crs)
+    nyc = gpd.read_file('./data/nybb_26a/nybb.shp').to_crs(crs).dissolve()
 
     ### load drb node info into geodataframes
     major_nodes = gpd.read_file(f'{spatial_data_dir}/model_components/drb_model_major_nodes.csv', sep=',')
@@ -91,6 +94,22 @@ def make_DRB_map(fig_dir=fig_dir,
     ### create map figures
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     
+
+    ### highlight DRB basin (above basemap, below map features)
+    if drb_highlight == 'inside':
+        drb_boundary.plot(ax=ax, color='khaki', edgecolor='none',
+                          alpha=0.35, zorder=0.2)
+    elif drb_highlight == 'outside':
+        _y_range = 5.235e6 - 4.75e6
+        _x_center = (-8.517e6 + -8.197e6) / 2
+        _x_shift = 0.035e6
+        mask_bbox = box(_x_center - _y_range/2 + _x_shift,
+                        4.75e6,
+                        _x_center + _y_range/2 + _x_shift,
+                        5.235e6)
+        outside_geom = mask_bbox.difference(drb_boundary.unary_union)
+        gpd.GeoDataFrame({'geometry': [outside_geom]}, crs=crs).plot(
+            ax=ax, color='0.85', edgecolor='none', alpha=0.6, zorder=0.2)
 
     ### plot drb boundary
     drb_boundary.plot(ax=ax, color='none', edgecolor='k', lw=0.5, zorder=0.9)
@@ -157,7 +176,12 @@ def make_DRB_map(fig_dir=fig_dir,
                                     geometry=gpd.points_from_xy(flow_reqs.long, flow_reqs.lat,
                                                                 crs=crs_nodedata)).to_crs(crs)
 
-        flow_reqs.plot(ax=ax, color='mediumseagreen', edgecolor='k', markersize=250, zorder=2.1, marker='*')
+        montague_color = 'lightgreen'
+        trenton_color = 'darkgreen'
+        flow_reqs.loc[flow_reqs['name'] == 'link_delMontague'].plot(
+            ax=ax, color=montague_color, edgecolor='k', markersize=250, zorder=2.1, marker='*')
+        flow_reqs.loc[flow_reqs['name'] == 'link_delTrenton'].plot(
+            ax=ax, color=trenton_color, edgecolor='k', markersize=250, zorder=2.1, marker='*')
 
     ### NYC tunnel system
     aqueducts.plot(ax=ax, color='darkmagenta', lw=2, zorder=1.2, ls=':')
@@ -170,6 +194,13 @@ def make_DRB_map(fig_dir=fig_dir,
         states.plot(ax=ax, color='none', edgecolor='0.5', lw=0.7, zorder=0)
     else:
         states.plot(ax=ax, color='0.95', edgecolor='0.5', lw=0.7, zorder=0)
+
+    ### highlight NYC
+    nyc.plot(ax=ax, color='goldenrod', edgecolor='goldenrod', lw=0.6, alpha=0.75, zorder=1.9)
+    nyc_centroid = nyc.geometry.iloc[0].centroid
+    plt.annotate('NYC', xy=(nyc_centroid.x + 0.008e6, nyc_centroid.y + 0.004e6),
+                 ha='center', va='center', fontsize=10,
+                 color='k', fontweight='bold', zorder=2.2)
 
 
     ### map limits
@@ -211,12 +242,14 @@ def make_DRB_map(fig_dir=fig_dir,
                      fontsize=fontsize, color=fontcolor, fontweight='bold')
 
     if plot_flow_requirements:
-        fontcolor = 'mediumseagreen'
-        plt.annotate('Montague', xy=(-8.284e6, 5.055e6),
-                     ha='center', va='center', fontsize=fontsize, color=fontcolor,
+        montague_label = plt.annotate('Montague', xy=(-8.284e6, 5.055e6),
+                     ha='center', va='center', fontsize=fontsize, color='lightgreen',
                     fontweight='bold')
+        montague_label.set_path_effects([
+            path_effects.Stroke(linewidth=1.2, foreground='black'),
+            path_effects.Normal()])
         plt.annotate('Trenton', xy=(-8.353e6, 4.894e6),
-                     ha='center', va='center', fontsize=fontsize, color=fontcolor,
+                     ha='center', va='center', fontsize=fontsize, color='darkgreen',
                     fontweight='bold')
 
     # Diversion labels
@@ -232,10 +265,10 @@ def make_DRB_map(fig_dir=fig_dir,
 
     ### Custom legend
     # Determine how many items will be included
-    n_legend_items = 6 # mainstem, boundary, nyc res, non-nyc res, diversions, reservoir cap scale
+    n_legend_items = 7 # mainstem, boundary, nyc res, non-nyc res, diversions, reservoir cap scale, NYC
 
     n_legend_items += int(plot_tributaries)
-    n_legend_items += int(plot_flow_requirements)
+    n_legend_items += 2 * int(plot_flow_requirements)
     
     # current y position for legend items
     yi = 0.95
@@ -287,11 +320,24 @@ def make_DRB_map(fig_dir=fig_dir,
                   ha='left', va='center', color='k',
                   fontsize=fontsize)
 
+    ### NYC boundary
+    yi -= item_spacing
+    axin.add_patch(mpatches.Rectangle((0.05, yi - 0.02), 0.10, 0.04,
+                                      facecolor='goldenrod', edgecolor='goldenrod',
+                                      lw=0.6, alpha=0.75))
+    axin.annotate('New York City', xy=(0.18, yi),
+                  ha='left', va='center', color='k', fontsize=fontsize)
+
     ### Minimum flow targets
     if plot_flow_requirements:
         yi -= item_spacing
-        axin.scatter([0.1], [yi], color='mediumseagreen', edgecolor='k', s=200, marker='*')
-        axin.annotate('Flow Target', xy=(0.18, yi),
+        axin.scatter([0.1], [yi], color='lightgreen', edgecolor='k', s=200, marker='*')
+        axin.annotate('Montague Flow Target', xy=(0.18, yi),
+                      ha='left', va='center', color='k',
+                      fontsize=fontsize)
+        yi -= item_spacing
+        axin.scatter([0.1], [yi], color='darkgreen', edgecolor='k', s=200, marker='*')
+        axin.annotate('Trenton Flow Target', xy=(0.18, yi),
                       ha='left', va='center', color='k',
                       fontsize=fontsize)
 
@@ -349,28 +395,19 @@ def make_DRB_map(fig_dir=fig_dir,
         scale_length_km = 50  # kilometers
         scale_length_map = scale_length_km * 1000 * scale_factor
 
-        # Draw scale bar background
-        scale_bar_height = 0.008e6
-        rect_bg = mpatches.Rectangle((scale_x, scale_y),
-                                     scale_length_map, scale_bar_height,
-                                     linewidth=2, edgecolor='black',
-                                     facecolor='white', zorder=10)
-        ax.add_patch(rect_bg)
-
-        # Add alternating black segments
-        segment_width = scale_length_map / 4
-        for i in range(4):
-            if i % 2 == 0:
-                seg_rect = mpatches.Rectangle((scale_x + i*segment_width, scale_y),
-                                             segment_width, scale_bar_height,
-                                             linewidth=0, facecolor='black', zorder=10.1)
-                ax.add_patch(seg_rect)
-
-        # Add scale labels
-        ax.text(scale_x, scale_y - 0.012e6, '0',
-                fontsize=9, ha='left', va='top', zorder=10)
-        ax.text(scale_x + scale_length_map, scale_y - 0.012e6, f'{scale_length_km} km',
-                fontsize=9, ha='right', va='top', zorder=10)
+        # Draw horizontal baseline with tick marks at 0, 25, 50 km
+        n_ticks = 2
+        tick_height = 0.006e6
+        ax.plot([scale_x, scale_x + scale_length_map], [scale_y, scale_y],
+                color='black', lw=1.5, solid_capstyle='butt', zorder=10)
+        for i in range(n_ticks + 1):
+            tx = scale_x + i * (scale_length_map / n_ticks)
+            ax.plot([tx, tx], [scale_y, scale_y + tick_height],
+                    color='black', lw=1.5, zorder=10)
+            tick_km = int(round(scale_length_km * i / n_ticks))
+            label = f'{tick_km} km' if i == n_ticks else f'{tick_km}'
+            ax.text(tx, scale_y - 0.004e6, label,
+                    fontsize=8, ha='center', va='top', zorder=10)
 
         # Add inlay map showing regional context in upper right
         axin_inlay = ax.inset_axes([0.70, 0.75, 0.28, 0.23])  # [x0, y0, width, height]
@@ -410,7 +447,8 @@ def make_DRB_map(fig_dir=fig_dir,
 
         # convert basemap soure to str
         basemap_source_str = basemap_source.name
-        figname = f'{fig_dir}/static_map_withbasemap_{basemap_source_str}.png'
+        highlight_suffix = f'_drb{drb_highlight}' if drb_highlight else ''
+        figname = f'{fig_dir}/static_map_withbasemap_{basemap_source_str}{highlight_suffix}.png'
         plt.savefig(figname, bbox_inches='tight', dpi=dpi)
 
     else:
@@ -420,4 +458,5 @@ def make_DRB_map(fig_dir=fig_dir,
 if __name__ == "__main__":
     # Generate map with default Esri.WorldShadedRelief basemap
     make_DRB_map(plot_flow_requirements=True,
-                 scale_reservoirs_by_capacity=False)
+                 scale_reservoirs_by_capacity=False,
+                 drb_highlight='outside')
