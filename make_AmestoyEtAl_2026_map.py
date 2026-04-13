@@ -35,7 +35,6 @@ def make_DRB_map(fig_dir=fig_dir,
                  plot_flow_requirements = True,
                  annotate_state_boundaries=True,
                  annotate_nyc_reservoirs=True,
-                 annotate_drbc_lb_reservoirs=True,
                  units='MG'):
 
     ### set crs consistent with contextily basemap
@@ -129,26 +128,10 @@ def make_DRB_map(fig_dir=fig_dir,
 
     # reservoirs
     list_nyc_reservoirs = ('reservoir_cannonsville', 'reservoir_pepacton', 'reservoir_neversink')
-    list_drbc_lb_reservoirs = [
-        'reservoir_beltzvilleCombined', 
-        'reservoir_blueMarsh',
-        ]
-    
-    
-    
+
     for r in reservoirs['name']:
-        
-        # for nyc reservoirs, plot in red
-        if r in list_nyc_reservoirs:
-            color = 'firebrick'
-        # for drbc lb reservoirs, plot in purple
-        elif r in list_drbc_lb_reservoirs:
-            color = 'darkorchid'
-        
-        # ignore all others
-        else:
-            continue
-                
+        color = 'firebrick' if r in list_nyc_reservoirs else 'sandybrown'
+
         if scale_reservoirs_by_capacity:
             r_abbrev = r.split('_')[1]
             if units == 'MG':
@@ -163,7 +146,7 @@ def make_DRB_map(fig_dir=fig_dir,
                     s = 50
         else:
             s = 100
-            
+
         reservoirs.loc[reservoirs['name'] == r].plot(ax=ax, color=color, edgecolor='k', markersize=s, zorder=2)
 
     # Montague and Trenton flow requirement locations
@@ -227,16 +210,6 @@ def make_DRB_map(fig_dir=fig_dir,
                      ha='center', va='center', 
                      fontsize=fontsize, color=fontcolor, fontweight='bold')
 
-    if annotate_drbc_lb_reservoirs:
-        fontcolor = 'darkorchid'
-        # Add labels to blueMarsh, Beltzville, and Fewalter
-        plt.annotate('Blue Marsh', xy=(-8.420e6, 4.920e6),
-                     ha='center', va='center',
-                     fontsize=fontsize, color=fontcolor, fontweight='bold')
-        plt.annotate('Beltzville', xy=(-8.404e6, 5.000e6),
-                     ha='center', va='center',
-                     fontsize=fontsize, color=fontcolor, fontweight='bold')
-
     if plot_flow_requirements:
         fontcolor = 'mediumseagreen'
         plt.annotate('Montague', xy=(-8.284e6, 5.055e6),
@@ -259,7 +232,7 @@ def make_DRB_map(fig_dir=fig_dir,
 
     ### Custom legend
     # Determine how many items will be included
-    n_legend_items = 5 # mainstem, boundary, nyc res, diversions, reservoir cap scale
+    n_legend_items = 6 # mainstem, boundary, nyc res, non-nyc res, diversions, reservoir cap scale
 
     n_legend_items += int(plot_tributaries)
     n_legend_items += int(plot_flow_requirements)
@@ -307,13 +280,12 @@ def make_DRB_map(fig_dir=fig_dir,
                   ha='left', va='center', color='k', 
                   fontsize=fontsize)
 
-    # Lower basin reservoirs
-    if annotate_drbc_lb_reservoirs:
-        yi -= item_spacing
-        axin.scatter([0.1], [yi], color='darkorchid', edgecolor='k', s=100)
-        axin.annotate('USACE Reservoir', xy=(0.18, yi), 
-                      ha='left', va='center', color='k',
-                      fontsize=fontsize)
+    # Non-NYC Reservoirs
+    yi -= item_spacing
+    axin.scatter([0.1], [yi], color='sandybrown', edgecolor='k', s=100)
+    axin.annotate('Non-NYC Reservoir', xy=(0.18, yi),
+                  ha='left', va='center', color='k',
+                  fontsize=fontsize)
 
     ### Minimum flow targets
     if plot_flow_requirements:
@@ -375,7 +347,7 @@ def make_DRB_map(fig_dir=fig_dir,
         lat_center = 40.5  # degrees (map center latitude)
         scale_factor = 1 / np.cos(np.radians(lat_center))
         scale_length_km = 50  # kilometers
-        scale_length_map = scale_length_km * 1000 / scale_factor
+        scale_length_map = scale_length_km * 1000 * scale_factor
 
         # Draw scale bar background
         scale_bar_height = 0.008e6
