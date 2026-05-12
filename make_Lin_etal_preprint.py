@@ -11,7 +11,9 @@ from matplotlib.markers import MarkerStyle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import contextily as cx
+from pyproj import Transformer
 
 mcm_to_mg = 264.17
 mg_to_mcm = 1 / mcm_to_mg
@@ -480,13 +482,64 @@ def make_DRB_map(fig_dir=fig_dir,
     axin.set_xticks([])
     axin.set_yticks([])
     axin.patch.set_alpha(0.9)
-    ax.set_xticks([])
-    ax.set_yticks([])
+
+    ### Long/lat tick labels.
+    # Map axes are in EPSG:3857 (Web Mercator). We pick lat/long values that
+    # fall within the visible extent, project them to Web Mercator with pyproj
+    # for accurate placement, then label the ticks in degrees.
+    to_webmercator = Transformer.from_crs(crs_longlat, crs, always_xy=True)
+    lon_ticks_deg = [-76, -75, -74]
+    lat_ticks_deg = [40, 41, 42]
+    # Web Mercator x depends only on longitude; y depends only on latitude.
+    x_ticks = [to_webmercator.transform(lon, 40.0)[0] for lon in lon_ticks_deg]
+    y_ticks = [to_webmercator.transform(-75.0, lat)[1] for lat in lat_ticks_deg]
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels([f'{abs(lon)}°W' for lon in lon_ticks_deg], fontsize=9)
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels([f'{lat}°N' for lat in lat_ticks_deg], fontsize=9)
+    ax.tick_params(axis='both', which='major', direction='out', length=4, pad=2)
     
     # ### basemap - this is slow and breaks sometimes, if so just try later
     if use_basemap:
-        cx.add_basemap(ax=ax, alpha=0.75, attribution_size=6, 
+        cx.add_basemap(ax=ax, alpha=0.75, attribution_size=6,
                        source=cx.providers.CartoDB.Positron)
+
+        # North arrow in the upper-left interior of the map
+        arrow_x = -8.508e6
+        arrow_y = 5.180e6
+        arrow_length = 0.025e6
+        arrow = mpatches.FancyArrow(arrow_x, arrow_y, 0, arrow_length,
+                                    width=arrow_length*0.15,
+                                    head_width=arrow_length*0.4,
+                                    head_length=arrow_length*0.25,
+                                    fc='black', ec='black',
+                                    linewidth=1, zorder=10)
+        ax.add_patch(arrow)
+        ax.text(arrow_x, arrow_y + arrow_length + 0.01e6, 'N',
+                fontsize=12, fontweight='bold', ha='center', va='bottom',
+                zorder=10)
+
+        # Scale bar in the lower-left interior of the map.
+        # Web Mercator distorts distance with latitude, so scale by 1/cos(lat).
+        scale_x = -8.508e6
+        scale_y = 4.790e6
+        lat_center = 40.5
+        scale_factor = 1 / np.cos(np.radians(lat_center))
+        scale_length_km = 50
+        scale_length_map = scale_length_km * 1000 * scale_factor
+        n_ticks = 2
+        tick_height = 0.006e6
+        ax.plot([scale_x, scale_x + scale_length_map], [scale_y, scale_y],
+                color='black', lw=1.5, solid_capstyle='butt', zorder=10)
+        for i in range(n_ticks + 1):
+            tx = scale_x + i * (scale_length_map / n_ticks)
+            ax.plot([tx, tx], [scale_y, scale_y + tick_height],
+                    color='black', lw=1.5, zorder=10)
+            tick_km = int(round(scale_length_km * i / n_ticks))
+            label = f'{tick_km} km' if i == n_ticks else f'{tick_km}'
+            ax.text(tx, scale_y - 0.004e6, label,
+                    fontsize=8, ha='center', va='top', zorder=10)
+
         figname = f'{fig_dir}/static_map_withbasemap_positron.png'
         plt.savefig(figname, bbox_inches='tight', dpi=dpi)
 

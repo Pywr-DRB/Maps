@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as path_effects
 import contextily as cx
+from pyproj import Transformer
 
 mcm_to_mg = 264.17
 mg_to_mcm = 1 / mcm_to_mg
@@ -360,8 +361,21 @@ def make_DRB_map(fig_dir=fig_dir,
     axin.set_xticks([])
     axin.set_yticks([])
     axin.patch.set_alpha(0.9)
-    ax.set_xticks([])
-    ax.set_yticks([])
+
+    ### Long/lat tick labels.
+    # Map axes are in EPSG:3857 (Web Mercator). Pick lat/long values in the
+    # visible extent, project them to Web Mercator with pyproj for accurate
+    # placement, then label the ticks in degrees.
+    to_webmercator = Transformer.from_crs(crs_longlat, crs, always_xy=True)
+    lon_ticks_deg = [-76, -75, -74, -73]
+    lat_ticks_deg = [40, 41, 42]
+    x_ticks = [to_webmercator.transform(lon, 40.0)[0] for lon in lon_ticks_deg]
+    y_ticks = [to_webmercator.transform(-75.0, lat)[1] for lat in lat_ticks_deg]
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels([f'{abs(lon)}°W' for lon in lon_ticks_deg], fontsize=9)
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels([f'{lat}°N' for lat in lat_ticks_deg], fontsize=9)
+    ax.tick_params(axis='both', which='major', direction='out', length=4, pad=2)
     
     # ### basemap - this is slow and breaks sometimes, if so just try later
     if use_basemap:
